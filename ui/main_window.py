@@ -118,12 +118,12 @@ class MainWindow(QMainWindow):
         self.build_stats_card(right)
 
     def build_todo_card(self, parent) -> None:
-        card = Card("To Do List", "오늘 할 일을 과목 또는 기타 카테고리에 연결하세요.")
+        card = Card("To Do List")
         parent.addWidget(card, 3)
 
         form = QHBoxLayout()
         self.todo_input = QLineEdit()
-        self.todo_input.setPlaceholderText("예: 자료구조 복습하기")
+        self.todo_input.setPlaceholderText("오늘 할 일 입력")
         self.todo_input.returnPressed.connect(self.add_todo)
         self.subject_button = QPushButton("과목")
         self.subject_button.setObjectName("SubjectButton")
