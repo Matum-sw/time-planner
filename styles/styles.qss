@@ -34,7 +34,7 @@
 }
 
 #CardTitle {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 800;
   color: #1d2738;
 }
@@ -124,11 +124,6 @@ QPushButton:hover {
   padding: 18px 0 12px 0;
 }
 
-#PlanScroll {
-  border: none;
-  background: transparent;
-}
-
 #TimeGrid {
   background: transparent;
 }
@@ -137,6 +132,7 @@ QPushButton:hover {
 #HourLabel {
   color: #93a0b4;
   font-weight: 700;
+  font-size: 12px;
 }
 
 #TimeBlock {
@@ -146,7 +142,7 @@ QPushButton:hover {
   color: #647086;
   font-weight: 700;
   text-align: left;
-  padding: 7px;
+  padding: 2px;
 }
 
 #TimeBlock:hover {

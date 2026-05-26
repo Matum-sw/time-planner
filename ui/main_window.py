@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QScrollArea,
+    QSizePolicy,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -147,20 +147,19 @@ class MainWindow(QMainWindow):
         )
         parent.addWidget(card, 1)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setObjectName("PlanScroll")
         grid_widget = QWidget()
         grid_widget.setObjectName("TimeGrid")
+        grid_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.time_grid = QGridLayout(grid_widget)
-        self.time_grid.setSpacing(8)
-        self.time_grid.setContentsMargins(4, 4, 4, 4)
+        self.time_grid.setSpacing(3)
+        self.time_grid.setContentsMargins(0, 0, 0, 0)
 
         self.time_grid.addWidget(QLabel(""), 0, 0)
         for column, minute in enumerate(MINUTES, start=1):
             label = QLabel(f"{minute:02d}")
             label.setObjectName("GridHeader")
             label.setAlignment(Qt.AlignCenter)
+            label.setMaximumHeight(18)
             self.time_grid.addWidget(label, 0, column)
 
         for row, hour in enumerate(HOURS, start=1):
@@ -177,8 +176,15 @@ class MainWindow(QMainWindow):
                 self.block_buttons[key] = button
                 self.time_grid.addWidget(button, row, column)
 
-        scroll.setWidget(grid_widget)
-        card.layout.addWidget(scroll, 1)
+        self.time_grid.setColumnStretch(0, 0)
+        self.time_grid.setColumnMinimumWidth(0, 26)
+        for column in range(1, len(MINUTES) + 1):
+            self.time_grid.setColumnStretch(column, 1)
+        self.time_grid.setRowStretch(0, 0)
+        for row in range(1, len(HOURS) + 1):
+            self.time_grid.setRowStretch(row, 1)
+
+        card.layout.addWidget(grid_widget, 1)
 
     def build_timer_card(self, parent) -> None:
         card = Card("Timer", "선택된 시간 블록의 집중 시간을 기록합니다.")
