@@ -144,7 +144,6 @@ QPushButton:hover {
   border: 1px solid #e8edf6;
   border-radius: 13px;
   color: #647086;
-  font-size: 11px;
   font-weight: 700;
   text-align: left;
   padding: 7px;

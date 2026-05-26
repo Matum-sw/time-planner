@@ -1,4 +1,4 @@
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QApplication, QFrame, QGraphicsDropShadowEffect, QLabel, QPushButton, QVBoxLayout
 
@@ -48,6 +48,30 @@ class TimeBlockButton(QPushButton):
         self.setObjectName("TimeBlock")
         self.setProperty("filled", False)
         self.setMinimumHeight(42)
+
+    def set_task_text(self, text: str) -> None:
+        self.setText(text)
+        self.setFont(self.scaled_font_for_text(text))
+
+    def scaled_font_for_text(self, text: str) -> QFont:
+        font = QFont(self.font())
+        compact_length = len(text.replace("\n", ""))
+        line_count = max(1, text.count("\n") + 1)
+
+        if not text:
+            point_size = 11
+        elif compact_length > 54 or line_count > 3:
+            point_size = 7
+        elif compact_length > 40:
+            point_size = 8
+        elif compact_length > 28:
+            point_size = 9
+        else:
+            point_size = 10
+
+        font.setPointSize(point_size)
+        font.setBold(True)
+        return font
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:

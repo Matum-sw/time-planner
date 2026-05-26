@@ -398,11 +398,11 @@ class MainWindow(QMainWindow):
         for key, button in self.block_buttons.items():
             todo = self.todo_lookup.get(blocks.get(key))
             if not todo:
-                button.setText("")
+                button.set_task_text("")
                 button.setProperty("filled", False)
                 button.setProperty("life", False)
             else:
-                button.setText(f"{todo.subject_name}\n{todo.title}")
+                button.set_task_text(f"{todo.subject_name}\n{todo.title}")
                 button.setProperty("filled", True)
                 button.setProperty("life", todo.subject_kind == "other")
             button.style().unpolish(button)
@@ -413,7 +413,7 @@ class MainWindow(QMainWindow):
         todo = self.todo_lookup.get(todo_id)
         if not button or not todo:
             return
-        button.setText(f"{todo.subject_name}\n{todo.title}")
+        button.set_task_text(f"{todo.subject_name}\n{todo.title}")
         button.setProperty("filled", True)
         button.setProperty("life", todo.subject_kind == "other")
         button.style().unpolish(button)
