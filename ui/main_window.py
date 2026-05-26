@@ -482,27 +482,34 @@ class MainWindow(QMainWindow):
         for todo in self.todo_lookup.values():
             item = QListWidgetItem()
             item.setData(Qt.UserRole, todo.id)
-            item.setSizeHint(QSize(0, 72 if len(todo.title) < 28 else 96))
+            item.setSizeHint(QSize(0, self.todo_item_height(todo)))
             item.setSelected(todo.id == self.selected_todo_id)
             self.todo_list.addItem(item)
             self.todo_list.setItemWidget(item, self.create_todo_item_widget(todo))
+
+    def todo_item_height(self, todo) -> int:
+        title_lines = max(1, (len(todo.title) + 20) // 21)
+        meta_lines = max(1, (len(todo.subject_name) + len(todo.status) + 16) // 30)
+        return min(150, 52 + title_lines * 22 + meta_lines * 18)
 
     def create_todo_item_widget(self, todo) -> QWidget:
         frame = QFrame()
         frame.setObjectName("TodoItemWidget")
         frame.setAttribute(Qt.WA_TransparentForMouseEvents)
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 8)
-        layout.setSpacing(4)
+        layout.setContentsMargins(10, 12, 10, 12)
+        layout.setSpacing(6)
 
         title = QLabel(todo.title)
         title.setObjectName("TodoItemTitle")
         title.setWordWrap(True)
+        title.setMinimumHeight(24)
         title.setTextInteractionFlags(Qt.NoTextInteraction)
 
         meta = QLabel(f"{todo.subject_name} · {self.status_label(todo.status)}")
         meta.setObjectName("TodoItemMeta")
         meta.setWordWrap(True)
+        meta.setMinimumHeight(22)
 
         layout.addWidget(title)
         layout.addWidget(meta)

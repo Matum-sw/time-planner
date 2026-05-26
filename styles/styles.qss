@@ -57,6 +57,12 @@ QListWidget {
   selection-background-color: #d9e8ff;
 }
 
+QLineEdit,
+QComboBox,
+QDateEdit {
+  min-height: 42px;
+}
+
 QComboBox,
 QDateEdit {
   padding-right: 38px;
@@ -117,7 +123,7 @@ QListWidget {
 
 QListWidget::item {
   border-radius: 14px;
-  padding: 12px;
+  padding: 4px;
   margin: 4px;
 }
 
@@ -134,12 +140,16 @@ QListWidget::item:selected {
   color: #202636;
   font-size: 14px;
   font-weight: 800;
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
 
 #TodoItemMeta {
   color: #738095;
   font-size: 12px;
   font-weight: 700;
+  padding-top: 1px;
+  padding-bottom: 1px;
 }
 
 QPushButton {
@@ -149,6 +159,7 @@ QPushButton {
   font-weight: 700;
   background: #edf3fb;
   color: #2c3950;
+  min-height: 40px;
 }
 
 QPushButton:hover {
@@ -288,8 +299,9 @@ QScrollBar:horizontal {
 
 #Pill {
   border-radius: 15px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   font-weight: 800;
+  min-height: 46px;
 }
 
 #Pill[tone="blue"] {

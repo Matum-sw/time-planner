@@ -42,6 +42,9 @@ class Pill(QLabel):
     def __init__(self, text: str, tone: str = "blue", parent=None):
         super().__init__(text, parent)
         self.setAlignment(Qt.AlignCenter)
+        self.setWordWrap(True)
+        self.setMinimumHeight(46)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.setProperty("tone", tone)
         self.setObjectName("Pill")
 
