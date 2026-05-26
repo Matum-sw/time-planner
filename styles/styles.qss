@@ -222,6 +222,16 @@ QPushButton:hover {
   background: transparent;
 }
 
+#StatsScroll {
+  border: none;
+  background: transparent;
+  min-height: 120px;
+}
+
+#StatsScroll QWidget {
+  background: transparent;
+}
+
 QScrollBar:vertical {
   background: #ffffff;
   border: 1px solid #dce8fb;
@@ -299,9 +309,9 @@ QScrollBar:horizontal {
 
 #Pill {
   border-radius: 15px;
-  padding: 12px 14px;
+  padding: 9px 12px;
   font-weight: 800;
-  min-height: 46px;
+  min-height: 40px;
 }
 
 #Pill[tone="blue"] {

@@ -253,8 +253,21 @@ class MainWindow(QMainWindow):
     def build_stats_card(self, parent) -> None:
         card = Card("Study Stats", "기타는 생활 일정으로만 집계하고 공부 통계에서는 제외합니다.")
         parent.addWidget(card, 1)
+
+        stats_scroll = QScrollArea()
+        stats_scroll.setWidgetResizable(True)
+        stats_scroll.setObjectName("StatsScroll")
+        stats_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        stats_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        stats_widget = QWidget()
+        stats_widget.setObjectName("StatsList")
         self.stats_container = QVBoxLayout()
-        card.layout.addLayout(self.stats_container)
+        self.stats_container.setContentsMargins(0, 0, 0, 0)
+        self.stats_container.setSpacing(10)
+        stats_widget.setLayout(self.stats_container)
+        stats_scroll.setWidget(stats_widget)
+        card.layout.addWidget(stats_scroll, 1)
 
         report_actions = QHBoxLayout()
         report_button = QPushButton("Markdown 리포트")
@@ -576,7 +589,6 @@ class MainWindow(QMainWindow):
 
         self.stats_container.addWidget(Pill(f"생활 일정 {round(life_total / 60)}분", "green"))
         self.stats_container.addWidget(Pill(f"중단/미룸 {paused_count}회", "orange"))
-        self.stats_container.addStretch(1)
 
     def generate_report(self) -> str:
         markdown = build_markdown_report(
