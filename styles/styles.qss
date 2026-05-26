@@ -82,6 +82,23 @@ QDateEdit::down-arrow {
   margin-right: 10px;
 }
 
+QMenu {
+  background: #ffffff;
+  border: 1px solid #dce8fb;
+  border-radius: 14px;
+  padding: 8px;
+}
+
+QMenu::item {
+  border-radius: 10px;
+  padding: 9px 28px 9px 12px;
+}
+
+QMenu::item:selected {
+  background: #e8f1ff;
+  color: #1f5fcf;
+}
+
 QTextEdit {
   padding: 14px;
 }
@@ -107,6 +124,22 @@ QListWidget::item {
 QListWidget::item:selected {
   background: #e9f2ff;
   color: #1f5fcf;
+}
+
+#TodoItemWidget {
+  background: transparent;
+}
+
+#TodoItemTitle {
+  color: #202636;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+#TodoItemMeta {
+  color: #738095;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 QPushButton {
@@ -140,6 +173,17 @@ QPushButton:hover {
 #SoftButton {
   background: #eef4ff;
   color: #2f68d7;
+}
+
+#SubjectButton {
+  background: #ffffff;
+  border: 1px solid #e3e9f4;
+  color: #2c3950;
+}
+
+#SubjectButton::menu-indicator {
+  image: none;
+  width: 0;
 }
 
 #DangerButton {

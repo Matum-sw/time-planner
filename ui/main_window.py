@@ -5,8 +5,8 @@ import time
 from PySide6.QtCore import QDate, QTimer, Qt
 from PySide6.QtCore import QSize
 from PySide6.QtWidgets import (
-    QComboBox,
     QDateEdit,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -40,6 +41,7 @@ class MainWindow(QMainWindow):
         self.ai = AIFeedbackService()
         self.day = self.store.today()
         self.selected_todo_id = None
+        self.selected_subject_id = None
         self.selected_block_key = None
         self.todo_lookup = {}
         self.block_buttons = {}
@@ -123,16 +125,22 @@ class MainWindow(QMainWindow):
         self.todo_input = QLineEdit()
         self.todo_input.setPlaceholderText("예: 자료구조 복습하기")
         self.todo_input.returnPressed.connect(self.add_todo)
-        self.subject_combo = QComboBox()
-        self.subject_combo.setMinimumWidth(190)
+        self.subject_button = QPushButton("과목")
+        self.subject_button.setObjectName("SubjectButton")
+        self.subject_button.setToolTip("과목 선택")
+        self.subject_button.setFixedWidth(86)
+        self.subject_menu = QMenu(self)
+        self.subject_button.setMenu(self.subject_menu)
         self.add_button = QPushButton("추가")
         self.add_button.setObjectName("PrimaryButton")
+        self.add_button.setFixedWidth(72)
         self.add_button.clicked.connect(self.add_todo)
         self.delete_todo_button = QPushButton("삭제")
         self.delete_todo_button.setObjectName("DangerButton")
+        self.delete_todo_button.setFixedWidth(72)
         self.delete_todo_button.clicked.connect(self.delete_selected_todo)
-        form.addWidget(self.todo_input, 1)
-        form.addWidget(self.subject_combo)
+        form.addWidget(self.todo_input, 4)
+        form.addWidget(self.subject_button)
         form.addWidget(self.add_button)
         form.addWidget(self.delete_todo_button)
         card.layout.addLayout(form)
@@ -261,7 +269,7 @@ class MainWindow(QMainWindow):
         title = self.todo_input.text().strip()
         if not title:
             return
-        subject_id = self.subject_combo.currentData()
+        subject_id = self.selected_subject_id
         self.store.add_todo(self.day, title, subject_id)
         self.todo_input.clear()
         self.refresh_todos()
@@ -444,24 +452,59 @@ class MainWindow(QMainWindow):
         self.refresh_stats()
 
     def refresh_subjects(self) -> None:
-        current = self.subject_combo.currentData() if hasattr(self, "subject_combo") else None
-        self.subject_combo.clear()
-        for subject in self.store.subjects(include_other=True):
-            self.subject_combo.addItem(subject.name, subject.id)
-        if current:
-            index = self.subject_combo.findData(current)
-            if index >= 0:
-                self.subject_combo.setCurrentIndex(index)
+        subjects = self.store.subjects(include_other=True)
+        if not subjects:
+            return
+        if self.selected_subject_id is None or not any(subject.id == self.selected_subject_id for subject in subjects):
+            self.selected_subject_id = subjects[0].id
+
+        self.subject_menu.clear()
+        selected_subject = subjects[0]
+        for subject in subjects:
+            if subject.id == self.selected_subject_id:
+                selected_subject = subject
+            action = self.subject_menu.addAction(subject.name)
+            action.setCheckable(True)
+            action.setChecked(subject.id == self.selected_subject_id)
+            action.triggered.connect(lambda _checked=False, subject_id=subject.id: self.select_subject(subject_id))
+        self.subject_button.setText("과목")
+        self.subject_button.setToolTip(f"선택된 과목: {selected_subject.name}")
+
+    def select_subject(self, subject_id: int) -> None:
+        self.selected_subject_id = subject_id
+        self.refresh_subjects()
 
     def refresh_todos(self) -> None:
         self.todo_list.clear()
         self.todo_lookup = {todo.id: todo for todo in self.store.todos_for_day(self.day)}
         for todo in self.todo_lookup.values():
-            item = QListWidgetItem(f"{todo.title}\n{todo.subject_name} · {self.status_label(todo.status)}")
+            item = QListWidgetItem()
             item.setData(Qt.UserRole, todo.id)
-            item.setSizeHint(QSize(0, 58 if len(todo.title) < 26 else 78))
+            item.setSizeHint(QSize(0, 72 if len(todo.title) < 28 else 96))
             item.setSelected(todo.id == self.selected_todo_id)
             self.todo_list.addItem(item)
+            self.todo_list.setItemWidget(item, self.create_todo_item_widget(todo))
+
+    def create_todo_item_widget(self, todo) -> QWidget:
+        frame = QFrame()
+        frame.setObjectName("TodoItemWidget")
+        frame.setAttribute(Qt.WA_TransparentForMouseEvents)
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(4)
+
+        title = QLabel(todo.title)
+        title.setObjectName("TodoItemTitle")
+        title.setWordWrap(True)
+        title.setTextInteractionFlags(Qt.NoTextInteraction)
+
+        meta = QLabel(f"{todo.subject_name} · {self.status_label(todo.status)}")
+        meta.setObjectName("TodoItemMeta")
+        meta.setWordWrap(True)
+
+        layout.addWidget(title)
+        layout.addWidget(meta)
+        return frame
 
     def refresh_brain_dump(self) -> None:
         content = self.store.brain_dump(self.day)
