@@ -115,6 +115,12 @@ class SQLiteStore:
         self.connection.execute("UPDATE todos SET status = ? WHERE id = ?", (status, todo_id))
         self.connection.commit()
 
+    def delete_todo(self, todo_id: int) -> None:
+        self.connection.execute("DELETE FROM time_blocks WHERE todo_id = ?", (todo_id,))
+        self.connection.execute("DELETE FROM timer_records WHERE todo_id = ?", (todo_id,))
+        self.connection.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
+        self.connection.commit()
+
     def todos_for_day(self, day: str) -> list[Todo]:
         rows = self.connection.execute(
             """
@@ -153,6 +159,10 @@ class SQLiteStore:
             """,
             (day, block_key, todo_id),
         )
+        self.connection.commit()
+
+    def delete_block(self, day: str, block_key: str) -> None:
+        self.connection.execute("DELETE FROM time_blocks WHERE day = ? AND block_key = ?", (day, block_key))
         self.connection.commit()
 
     def blocks_for_day(self, day: str) -> dict[str, int]:

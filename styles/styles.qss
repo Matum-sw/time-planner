@@ -57,6 +57,31 @@ QListWidget {
   selection-background-color: #d9e8ff;
 }
 
+QComboBox,
+QDateEdit {
+  padding-right: 38px;
+}
+
+QComboBox::drop-down,
+QDateEdit::drop-down {
+  width: 32px;
+  border: none;
+  border-top-right-radius: 16px;
+  border-bottom-right-radius: 16px;
+  background: #f4f8ff;
+}
+
+QComboBox::down-arrow,
+QDateEdit::down-arrow {
+  width: 0;
+  height: 0;
+  image: none;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid #7b8798;
+  margin-right: 10px;
+}
+
 QTextEdit {
   padding: 14px;
 }
@@ -115,6 +140,15 @@ QPushButton:hover {
 #SoftButton {
   background: #eef4ff;
   color: #2f68d7;
+}
+
+#DangerButton {
+  background: #fff2f4;
+  color: #d9485f;
+}
+
+#DangerButton:hover {
+  background: #ffe6ea;
 }
 
 #TimerValue {
@@ -202,6 +236,10 @@ QScrollBar:horizontal {
   background: #eff8ed;
   border: 1px solid #cfeac9;
   color: #477d37;
+}
+
+#TimeBlock[selected="true"] {
+  border: 2px solid #3f7df1;
 }
 
 #Pill {

@@ -3,6 +3,7 @@ from datetime import datetime
 import time
 
 from PySide6.QtCore import QDate, QTimer, Qt
+from PySide6.QtCore import QSize
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -39,6 +40,7 @@ class MainWindow(QMainWindow):
         self.ai = AIFeedbackService()
         self.day = self.store.today()
         self.selected_todo_id = None
+        self.selected_block_key = None
         self.todo_lookup = {}
         self.block_buttons = {}
         self.drag_todo_id = None
@@ -80,6 +82,7 @@ class MainWindow(QMainWindow):
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setDisplayFormat("yyyy-MM-dd")
         self.date_edit.setDate(QDate.currentDate())
+        self.date_edit.setMinimumWidth(148)
         self.date_edit.dateChanged.connect(self.change_date)
         subject_button = QPushButton("과목 관리")
         subject_button.clicked.connect(self.open_subjects)
@@ -121,15 +124,21 @@ class MainWindow(QMainWindow):
         self.todo_input.setPlaceholderText("예: 자료구조 복습하기")
         self.todo_input.returnPressed.connect(self.add_todo)
         self.subject_combo = QComboBox()
+        self.subject_combo.setMinimumWidth(190)
         self.add_button = QPushButton("추가")
         self.add_button.setObjectName("PrimaryButton")
         self.add_button.clicked.connect(self.add_todo)
+        self.delete_todo_button = QPushButton("삭제")
+        self.delete_todo_button.setObjectName("DangerButton")
+        self.delete_todo_button.clicked.connect(self.delete_selected_todo)
         form.addWidget(self.todo_input, 1)
         form.addWidget(self.subject_combo)
         form.addWidget(self.add_button)
+        form.addWidget(self.delete_todo_button)
         card.layout.addLayout(form)
 
         self.todo_list = QListWidget()
+        self.todo_list.setWordWrap(True)
         self.todo_list.itemClicked.connect(self.select_todo)
         card.layout.addWidget(self.todo_list, 1)
 
@@ -147,6 +156,16 @@ class MainWindow(QMainWindow):
             "To Do를 선택하고 시간 블록을 클릭하거나 드래그하면 배치됩니다. 배치된 블록을 다시 클릭하면 타이머가 시작됩니다.",
         )
         parent.addWidget(card, 1)
+
+        plan_actions = QHBoxLayout()
+        self.selected_block_label = QLabel("선택된 블록 없음")
+        self.selected_block_label.setObjectName("MutedText")
+        self.delete_block_button = QPushButton("선택 블록 삭제")
+        self.delete_block_button.setObjectName("SoftButton")
+        self.delete_block_button.clicked.connect(self.delete_selected_block)
+        plan_actions.addWidget(self.selected_block_label, 1)
+        plan_actions.addWidget(self.delete_block_button)
+        card.layout.addLayout(plan_actions)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -251,7 +270,19 @@ class MainWindow(QMainWindow):
         self.selected_todo_id = item.data(Qt.UserRole)
         self.refresh_todos()
 
+    def delete_selected_todo(self) -> None:
+        if not self.selected_todo_id:
+            QMessageBox.information(self, "To Do 선택", "삭제할 To Do를 먼저 선택하세요.")
+            return
+        if self.running and self.running["todo_id"] == self.selected_todo_id:
+            self.stop_timer("paused")
+        self.store.delete_todo(self.selected_todo_id)
+        self.selected_todo_id = None
+        self.selected_block_key = None
+        self.refresh_all()
+
     def on_block_pressed(self, block_key: str) -> None:
+        self.set_selected_block(block_key)
         if self.selected_todo_id:
             self.drag_todo_id = self.selected_todo_id
             self.drag_visited_blocks = set()
@@ -289,8 +320,38 @@ class MainWindow(QMainWindow):
         if not self.drag_todo_id or block_key in self.drag_visited_blocks:
             return
         self.store.assign_block(self.day, block_key, self.drag_todo_id)
+        self.set_selected_block(block_key)
         self.drag_visited_blocks.add(block_key)
         self.refresh_single_block(block_key, self.drag_todo_id)
+
+    def delete_selected_block(self) -> None:
+        if not self.selected_block_key:
+            QMessageBox.information(self, "블록 선택", "삭제할 Time Plan 블록을 먼저 선택하세요.")
+            return
+        self.store.delete_block(self.day, self.selected_block_key)
+        if self.running and self.running["block_key"] == self.selected_block_key:
+            self.stop_timer("paused")
+        self.selected_block_key = None
+        self.update_selected_block_label()
+        self.refresh_blocks()
+
+    def set_selected_block(self, block_key: str | None) -> None:
+        previous = self.selected_block_key
+        self.selected_block_key = block_key
+        for key in {previous, block_key}:
+            if key and key in self.block_buttons:
+                button = self.block_buttons[key]
+                button.setProperty("selected", key == block_key)
+                button.style().unpolish(button)
+                button.style().polish(button)
+                button.update()
+        self.update_selected_block_label()
+
+    def update_selected_block_label(self) -> None:
+        if not hasattr(self, "selected_block_label"):
+            return
+        text = f"선택된 블록 {self.selected_block_key}" if self.selected_block_key else "선택된 블록 없음"
+        self.selected_block_label.setText(text)
 
     def on_block_clicked(self, block_key: str) -> None:
         blocks = self.store.blocks_for_day(self.day)
@@ -368,6 +429,7 @@ class MainWindow(QMainWindow):
     def change_date(self, qdate: QDate) -> None:
         self.day = qdate.toString("yyyy-MM-dd")
         self.selected_todo_id = None
+        self.set_selected_block(None)
         self.refresh_all()
 
     def open_subjects(self) -> None:
@@ -397,6 +459,7 @@ class MainWindow(QMainWindow):
         for todo in self.todo_lookup.values():
             item = QListWidgetItem(f"{todo.title}\n{todo.subject_name} · {self.status_label(todo.status)}")
             item.setData(Qt.UserRole, todo.id)
+            item.setSizeHint(QSize(0, 58 if len(todo.title) < 26 else 78))
             item.setSelected(todo.id == self.selected_todo_id)
             self.todo_list.addItem(item)
 
@@ -419,8 +482,10 @@ class MainWindow(QMainWindow):
                 button.set_task_text(f"{todo.subject_name}\n{todo.title}")
                 button.setProperty("filled", True)
                 button.setProperty("life", todo.subject_kind == "other")
+            button.setProperty("selected", key == self.selected_block_key)
             button.style().unpolish(button)
             button.style().polish(button)
+            button.update()
 
     def refresh_single_block(self, block_key: str, todo_id: int) -> None:
         button = self.block_buttons.get(block_key)
@@ -430,6 +495,7 @@ class MainWindow(QMainWindow):
         button.set_task_text(f"{todo.subject_name}\n{todo.title}")
         button.setProperty("filled", True)
         button.setProperty("life", todo.subject_kind == "other")
+        button.setProperty("selected", block_key == self.selected_block_key)
         button.style().unpolish(button)
         button.style().polish(button)
 
