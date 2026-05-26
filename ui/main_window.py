@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import datetime
 import time
 
 from PySide6.QtCore import QDate, QTimer, Qt
@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from core.openai_feedback import AIFeedbackService
 from core.reporting import build_markdown_report, save_markdown_report
 from ui.subject_dialog import SubjectDialog
-from ui.widgets import Card, Pill
+from ui.widgets import Card, Pill, TimeBlockButton
 
 
 HOURS = list(range(4, 25))
@@ -40,6 +40,9 @@ class MainWindow(QMainWindow):
         self.selected_todo_id = None
         self.todo_lookup = {}
         self.block_buttons = {}
+        self.drag_todo_id = None
+        self.drag_visited_blocks = set()
+        self.drag_is_painting = False
         self.running = None
         self.tick = QTimer(self)
         self.tick.timeout.connect(self.update_timer)
@@ -138,7 +141,10 @@ class MainWindow(QMainWindow):
         card.layout.addWidget(self.brain_dump, 1)
 
     def build_plan_card(self, parent) -> None:
-        card = Card("Time Plan", "To Do를 선택하고 시간 블록을 클릭하면 배치됩니다. 배치된 블록을 다시 클릭하면 타이머가 시작됩니다.")
+        card = Card(
+            "Time Plan",
+            "To Do를 선택하고 시간 블록을 클릭하거나 드래그하면 배치됩니다. 배치된 블록을 다시 클릭하면 타이머가 시작됩니다.",
+        )
         parent.addWidget(card, 1)
 
         scroll = QScrollArea()
@@ -164,11 +170,10 @@ class MainWindow(QMainWindow):
             self.time_grid.addWidget(hour_label, row, 0)
             for column, minute in enumerate(MINUTES, start=1):
                 key = f"{hour:02d}:{minute:02d}"
-                button = QPushButton("")
-                button.setObjectName("TimeBlock")
-                button.setProperty("filled", False)
-                button.setMinimumHeight(42)
-                button.clicked.connect(lambda _checked=False, block_key=key: self.on_block_clicked(block_key))
+                button = TimeBlockButton(key)
+                button.pressed_block.connect(self.on_block_pressed)
+                button.entered_block.connect(self.on_block_entered)
+                button.released_block.connect(self.on_block_released)
                 self.block_buttons[key] = button
                 self.time_grid.addWidget(button, row, column)
 
@@ -231,6 +236,47 @@ class MainWindow(QMainWindow):
     def select_todo(self, item: QListWidgetItem) -> None:
         self.selected_todo_id = item.data(Qt.UserRole)
         self.refresh_todos()
+
+    def on_block_pressed(self, block_key: str) -> None:
+        if self.selected_todo_id:
+            self.drag_todo_id = self.selected_todo_id
+            self.drag_visited_blocks = set()
+            self.drag_is_painting = True
+            self.paint_todo_to_block(block_key)
+            return
+
+        blocks = self.store.blocks_for_day(self.day)
+        todo_id = blocks.get(block_key)
+        if todo_id:
+            self.start_timer(block_key, todo_id)
+            return
+        QMessageBox.information(self, "To Do 선택", "먼저 To Do 카드를 선택한 뒤 시간 블록을 클릭하세요.")
+
+    def on_block_entered(self, block_key: str) -> None:
+        if not self.drag_is_painting or not self.drag_todo_id:
+            return
+        self.paint_todo_to_block(block_key)
+
+    def on_block_released(self, block_key: str) -> None:
+        if not self.drag_is_painting:
+            return
+
+        visited_count = len(self.drag_visited_blocks)
+        todo_id = self.drag_todo_id
+        self.drag_todo_id = None
+        self.drag_is_painting = False
+        self.drag_visited_blocks = set()
+        self.refresh_blocks()
+
+        if visited_count == 1 and todo_id:
+            self.start_timer(block_key, todo_id)
+
+    def paint_todo_to_block(self, block_key: str) -> None:
+        if not self.drag_todo_id or block_key in self.drag_visited_blocks:
+            return
+        self.store.assign_block(self.day, block_key, self.drag_todo_id)
+        self.drag_visited_blocks.add(block_key)
+        self.refresh_single_block(block_key, self.drag_todo_id)
 
     def on_block_clicked(self, block_key: str) -> None:
         blocks = self.store.blocks_for_day(self.day)
@@ -361,6 +407,17 @@ class MainWindow(QMainWindow):
                 button.setProperty("life", todo.subject_kind == "other")
             button.style().unpolish(button)
             button.style().polish(button)
+
+    def refresh_single_block(self, block_key: str, todo_id: int) -> None:
+        button = self.block_buttons.get(block_key)
+        todo = self.todo_lookup.get(todo_id)
+        if not button or not todo:
+            return
+        button.setText(f"{todo.subject_name}\n{todo.title}")
+        button.setProperty("filled", True)
+        button.setProperty("life", todo.subject_kind == "other")
+        button.style().unpolish(button)
+        button.style().polish(button)
 
     def refresh_stats(self) -> None:
         self.clear_layout(self.stats_container)

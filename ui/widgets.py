@@ -1,6 +1,6 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QGraphicsDropShadowEffect, QLabel, QVBoxLayout
 from PySide6.QtGui import QColor
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QApplication, QFrame, QGraphicsDropShadowEffect, QLabel, QPushButton, QVBoxLayout
 
 
 class Card(QFrame):
@@ -35,3 +35,31 @@ class Pill(QLabel):
         self.setProperty("tone", tone)
         self.setObjectName("Pill")
 
+
+class TimeBlockButton(QPushButton):
+    pressed_block = Signal(str)
+    entered_block = Signal(str)
+    released_block = Signal(str)
+
+    def __init__(self, block_key: str, parent=None):
+        super().__init__("", parent)
+        self.block_key = block_key
+        self.setMouseTracking(True)
+        self.setObjectName("TimeBlock")
+        self.setProperty("filled", False)
+        self.setMinimumHeight(42)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.pressed_block.emit(self.block_key)
+        super().mousePressEvent(event)
+
+    def enterEvent(self, event):
+        if QApplication.mouseButtons() & Qt.LeftButton:
+            self.entered_block.emit(self.block_key)
+        super().enterEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.released_block.emit(self.block_key)
+        super().mouseReleaseEvent(event)
