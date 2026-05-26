@@ -58,7 +58,7 @@ class TimeBlockButton(QPushButton):
         self.setMouseTracking(True)
         self.setObjectName("TimeBlock")
         self.setProperty("filled", False)
-        self.setMinimumHeight(16)
+        self.setMinimumHeight(42)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def set_task_text(self, text: str) -> None:
@@ -76,7 +76,7 @@ class TimeBlockButton(QPushButton):
         if not self.task_text:
             return
 
-        rect = self.rect().adjusted(5, 2, -5, -2)
+        rect = self.rect().adjusted(7, 3, -7, -3)
         painter.setFont(self.scaled_font_for_text(self.task_text))
         painter.setPen(QColor(self.text_color()))
         painter.drawText(rect, Qt.AlignLeft | Qt.AlignVCenter | Qt.TextWordWrap, self.task_text)
@@ -92,7 +92,7 @@ class TimeBlockButton(QPushButton):
         font = QFont(self.font())
         compact_length = len(text.replace("\n", ""))
         line_count = max(1, text.count("\n") + 1)
-        available_height = max(16, self.height() - 4)
+        available_height = max(22, self.height() - 6)
 
         if not text:
             point_size = 10

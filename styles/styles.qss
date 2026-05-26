@@ -34,7 +34,7 @@
 }
 
 #CardTitle {
-  font-size: 19px;
+  font-size: 20px;
   font-weight: 800;
   color: #1d2738;
 }
@@ -151,7 +151,7 @@ QPushButton:hover {
   color: #647086;
   font-weight: 700;
   text-align: left;
-  padding: 2px;
+  padding: 7px;
 }
 
 #TimeBlock:hover {

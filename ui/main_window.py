@@ -158,8 +158,8 @@ class MainWindow(QMainWindow):
         grid_widget.setObjectName("TimeGrid")
         grid_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.time_grid = QGridLayout(grid_widget)
-        self.time_grid.setSpacing(3)
-        self.time_grid.setContentsMargins(0, 0, 0, 0)
+        self.time_grid.setSpacing(8)
+        self.time_grid.setContentsMargins(4, 4, 4, 4)
 
         self.time_grid.addWidget(QLabel(""), 0, 0)
         for column, minute in enumerate(MINUTES, start=1):
