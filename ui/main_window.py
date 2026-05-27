@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 from core.openai_feedback import AIFeedbackService
 from core.reporting import build_markdown_report, save_markdown_report
 from ui.subject_dialog import SubjectDialog
-from ui.widgets import Card, Pill, TimeBlockButton
+from ui.widgets import Card, Pill, TimeBlockButton, TimeGridWidget, TimelineHeader
 
 
 HOURS = list(range(4, 25))
@@ -183,20 +183,16 @@ class MainWindow(QMainWindow):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
-        grid_widget = QWidget()
+        grid_widget = TimeGridWidget(lambda: self.day)
         grid_widget.setObjectName("TimeGrid")
         grid_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.time_grid = QGridLayout(grid_widget)
-        self.time_grid.setSpacing(8)
+        self.time_grid.setHorizontalSpacing(0)
+        self.time_grid.setVerticalSpacing(8)
         self.time_grid.setContentsMargins(4, 4, 4, 4)
 
         self.time_grid.addWidget(QLabel(""), 0, 0)
-        for column, minute in enumerate(MINUTES, start=1):
-            label = QLabel(f"{minute:02d}")
-            label.setObjectName("GridHeader")
-            label.setAlignment(Qt.AlignCenter)
-            label.setMaximumHeight(18)
-            self.time_grid.addWidget(label, 0, column)
+        self.time_grid.addWidget(TimelineHeader(), 0, 1, 1, len(MINUTES))
 
         for row, hour in enumerate(HOURS, start=1):
             hour_label = QLabel(str(hour))
@@ -206,6 +202,12 @@ class MainWindow(QMainWindow):
             for column, minute in enumerate(MINUTES, start=1):
                 key = f"{hour:02d}:{minute:02d}"
                 button = TimeBlockButton(key)
+                if column == 1:
+                    button.setProperty("segment", "first")
+                elif column == len(MINUTES):
+                    button.setProperty("segment", "last")
+                else:
+                    button.setProperty("segment", "middle")
                 button.pressed_block.connect(self.on_block_pressed)
                 button.entered_block.connect(self.on_block_entered)
                 button.released_block.connect(self.on_block_released)
@@ -221,6 +223,7 @@ class MainWindow(QMainWindow):
             self.time_grid.setRowStretch(row, 1)
 
         scroll.setWidget(grid_widget)
+        grid_widget.set_block_buttons(self.block_buttons)
         card.layout.addWidget(scroll, 1)
 
     def build_timer_card(self, parent) -> None:

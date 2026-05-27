@@ -276,14 +276,33 @@ QScrollBar:horizontal {
   font-size: 12px;
 }
 
+#TimelineHeader {
+  background: transparent;
+}
+
 #TimeBlock {
   background: rgba(255, 255, 255, 0.74);
   border: 1px solid #e8edf6;
-  border-radius: 13px;
+  border-radius: 0;
   color: #647086;
   font-weight: 700;
   text-align: left;
   padding: 7px;
+}
+
+#TimeBlock[segment="first"] {
+  border-top-left-radius: 13px;
+  border-bottom-left-radius: 13px;
+}
+
+#TimeBlock[segment="middle"] {
+  border-left: none;
+}
+
+#TimeBlock[segment="last"] {
+  border-left: none;
+  border-top-right-radius: 13px;
+  border-bottom-right-radius: 13px;
 }
 
 #TimeBlock:hover {

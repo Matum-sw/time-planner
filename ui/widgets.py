@@ -1,5 +1,7 @@
-from PySide6.QtGui import QColor, QFont, QPainter
-from PySide6.QtCore import Qt, Signal
+from datetime import datetime
+
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtCore import Qt, QRectF, Signal, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -9,6 +11,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QStyle,
     QStyleOptionButton,
+    QWidget,
     QVBoxLayout,
 )
 
@@ -47,6 +50,106 @@ class Pill(QLabel):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.setProperty("tone", tone)
         self.setObjectName("Pill")
+
+
+class TimelineHeader(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("TimelineHeader")
+        self.setMinimumHeight(30)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        rect = self.rect().adjusted(2, 17, -2, -6)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#e8f1ff"))
+        painter.drawRoundedRect(QRectF(rect), 5, 5)
+
+        font = QFont(self.font())
+        font.setPointSize(9)
+        font.setBold(True)
+        painter.setFont(font)
+
+        for minute in range(0, 61, 10):
+            x = rect.left() + (rect.width() * minute / 60)
+            painter.setPen(QPen(QColor("#b6c7df"), 1))
+            painter.drawLine(int(x), rect.top() - 4, int(x), rect.bottom())
+            painter.setPen(QColor("#93a0b4"))
+            label = f"{minute:02d}"
+            painter.drawText(QRectF(x - 16, 0, 32, 16), Qt.AlignCenter, label)
+
+
+class TimeGridWidget(QWidget):
+    def __init__(self, day_provider, parent=None):
+        super().__init__(parent)
+        self.day_provider = day_provider
+        self.block_buttons = {}
+        self.overlay = TimeMarkerOverlay(self)
+        self.overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.overlay.raise_()
+
+        self.marker_timer = QTimer(self)
+        self.marker_timer.timeout.connect(self.overlay.update)
+        self.marker_timer.start(1000)
+
+    def set_block_buttons(self, block_buttons: dict) -> None:
+        self.block_buttons = block_buttons
+        self.overlay.update()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self.overlay.setGeometry(self.rect())
+        self.overlay.raise_()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.overlay.setGeometry(self.rect())
+        self.overlay.raise_()
+
+    def is_today(self) -> bool:
+        return self.day_provider() == datetime.now().date().isoformat()
+
+
+class TimeMarkerOverlay(QWidget):
+    def paintEvent(self, event) -> None:
+        grid = self.parent()
+        if not grid or not grid.is_today():
+            return
+
+        now = datetime.now()
+        first = grid.block_buttons.get(f"{now.hour:02d}:00")
+        last = grid.block_buttons.get(f"{now.hour:02d}:50")
+        if not first or not last:
+            return
+
+        left = first.x()
+        right = last.x() + last.width()
+        progress = ((now.minute * 60) + now.second) / 3600
+        x = left + (right - left) * progress
+        y1 = first.y() - 6
+        y2 = first.y() + first.height() + 6
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(QColor("#2f7df6"), 3))
+        painter.drawLine(int(x), y1, int(x), y2)
+
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#2f7df6"))
+        painter.drawEllipse(QRectF(x - 5, y1 - 5, 10, 10))
+
+        font = QFont(self.font())
+        font.setPointSize(8)
+        font.setBold(True)
+        painter.setFont(font)
+        label = now.strftime("%H:%M")
+        bubble = QRectF(max(0, x - 24), max(0, y1 - 25), 48, 18)
+        painter.drawRoundedRect(bubble, 8, 8)
+        painter.setPen(QColor("#ffffff"))
+        painter.drawText(bubble, Qt.AlignCenter, label)
 
 
 class TimeBlockButton(QPushButton):
