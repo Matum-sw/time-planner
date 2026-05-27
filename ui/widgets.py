@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtCore import Qt, QRectF, Signal, QTimer
+from PySide6.QtCore import QPoint, Qt, QRectF, Signal, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -155,6 +155,7 @@ class TimeMarkerOverlay(QWidget):
 class TimeBlockButton(QPushButton):
     pressed_block = Signal(str)
     entered_block = Signal(str)
+    moved_block = Signal(QPoint)
     released_block = Signal(str)
 
     def __init__(self, block_key: str, parent=None):
@@ -224,6 +225,11 @@ class TimeBlockButton(QPushButton):
         if QApplication.mouseButtons() & Qt.LeftButton:
             self.entered_block.emit(self.block_key)
         super().enterEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.LeftButton:
+            self.moved_block.emit(event.globalPosition().toPoint())
+        super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:

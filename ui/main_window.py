@@ -5,6 +5,7 @@ import time
 from PySide6.QtCore import QDate, QTimer, Qt
 from PySide6.QtCore import QSize
 from PySide6.QtWidgets import (
+    QApplication,
     QDateEdit,
     QFrame,
     QGridLayout,
@@ -48,6 +49,7 @@ class MainWindow(QMainWindow):
         self.drag_todo_id = None
         self.drag_visited_blocks = set()
         self.drag_is_painting = False
+        self.drag_last_block_key = None
         self.running = None
         self.tick = QTimer(self)
         self.tick.timeout.connect(self.update_timer)
@@ -210,6 +212,7 @@ class MainWindow(QMainWindow):
                     button.setProperty("segment", "middle")
                 button.pressed_block.connect(self.on_block_pressed)
                 button.entered_block.connect(self.on_block_entered)
+                button.moved_block.connect(self.on_block_moved)
                 button.released_block.connect(self.on_block_released)
                 self.block_buttons[key] = button
                 self.time_grid.addWidget(button, row, column)
@@ -328,19 +331,30 @@ class MainWindow(QMainWindow):
             return
         self.paint_todo_to_block(block_key)
 
+    def on_block_moved(self, global_pos) -> None:
+        if not self.drag_is_painting or not self.drag_todo_id:
+            return
+        widget = QApplication.widgetAt(global_pos)
+        while widget and not isinstance(widget, TimeBlockButton):
+            widget = widget.parentWidget()
+        if isinstance(widget, TimeBlockButton):
+            self.paint_todo_to_block(widget.block_key)
+
     def on_block_released(self, block_key: str) -> None:
         if not self.drag_is_painting:
             return
 
         visited_count = len(self.drag_visited_blocks)
         todo_id = self.drag_todo_id
+        last_block_key = self.drag_last_block_key or block_key
         self.drag_todo_id = None
         self.drag_is_painting = False
+        self.drag_last_block_key = None
         self.drag_visited_blocks = set()
         self.refresh_blocks()
 
         if visited_count == 1 and todo_id:
-            self.start_timer(block_key, todo_id)
+            self.start_timer(last_block_key, todo_id)
 
     def paint_todo_to_block(self, block_key: str) -> None:
         if not self.drag_todo_id or block_key in self.drag_visited_blocks:
@@ -348,6 +362,7 @@ class MainWindow(QMainWindow):
         self.store.assign_block(self.day, block_key, self.drag_todo_id)
         self.set_selected_block(block_key)
         self.drag_visited_blocks.add(block_key)
+        self.drag_last_block_key = block_key
         self.refresh_single_block(block_key, self.drag_todo_id)
 
     def delete_selected_block(self) -> None:
