@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import datetime
 import time
+from uuid import uuid4
 
 from PySide6.QtCore import QDate, QTimer, Qt
 from PySide6.QtCore import QSize
@@ -185,10 +186,10 @@ class MainWindow(QMainWindow):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
-        grid_widget = TimeGridWidget(lambda: self.day)
-        grid_widget.setObjectName("TimeGrid")
-        grid_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.time_grid = QGridLayout(grid_widget)
+        self.time_grid_widget = TimeGridWidget(lambda: self.day)
+        self.time_grid_widget.setObjectName("TimeGrid")
+        self.time_grid_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.time_grid = QGridLayout(self.time_grid_widget)
         self.time_grid.setHorizontalSpacing(0)
         self.time_grid.setVerticalSpacing(8)
         self.time_grid.setContentsMargins(4, 4, 4, 4)
@@ -225,8 +226,8 @@ class MainWindow(QMainWindow):
         for row in range(1, len(HOURS) + 1):
             self.time_grid.setRowStretch(row, 1)
 
-        scroll.setWidget(grid_widget)
-        grid_widget.set_block_buttons(self.block_buttons)
+        scroll.setWidget(self.time_grid_widget)
+        self.time_grid_widget.set_block_buttons(self.block_buttons)
         card.layout.addWidget(scroll, 1)
 
     def build_timer_card(self, parent) -> None:
@@ -242,16 +243,16 @@ class MainWindow(QMainWindow):
         card.layout.addWidget(self.timer_value)
 
         actions = QHBoxLayout()
-        self.stop_button = QPushButton("저장")
-        self.stop_button.setObjectName("PrimaryButton")
-        self.stop_button.clicked.connect(lambda: self.stop_timer("completed"))
-        self.pause_button = QPushButton("중단")
-        self.pause_button.setObjectName("SoftButton")
-        self.pause_button.clicked.connect(lambda: self.stop_timer("paused"))
+        self.cancel_button = QPushButton("취소")
+        self.cancel_button.setObjectName("DangerButton")
+        self.cancel_button.clicked.connect(self.cancel_timer_session)
+        self.pause_button = QPushButton("실행")
+        self.pause_button.setObjectName("PrimaryButton")
+        self.pause_button.clicked.connect(self.toggle_timer)
         self.defer_button = QPushButton("미룸")
         self.defer_button.setObjectName("SoftButton")
-        self.defer_button.clicked.connect(lambda: self.stop_timer("deferred"))
-        actions.addWidget(self.stop_button)
+        self.defer_button.clicked.connect(self.defer_timer_session)
+        actions.addWidget(self.cancel_button)
         actions.addWidget(self.pause_button)
         actions.addWidget(self.defer_button)
         card.layout.addLayout(actions)
@@ -304,7 +305,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "To Do 선택", "삭제할 To Do를 먼저 선택하세요.")
             return
         if self.running and self.running["todo_id"] == self.selected_todo_id:
-            self.stop_timer("paused")
+            self.cancel_timer_session()
         self.store.delete_todo(self.selected_todo_id)
         self.selected_todo_id = None
         self.selected_block_key = None
@@ -322,7 +323,7 @@ class MainWindow(QMainWindow):
         blocks = self.store.blocks_for_day(self.day)
         todo_id = blocks.get(block_key)
         if todo_id:
-            self.start_timer(block_key, todo_id)
+            self.prepare_timer(block_key, todo_id)
             return
         QMessageBox.information(self, "To Do 선택", "먼저 To Do 카드를 선택한 뒤 시간 블록을 클릭하세요.")
 
@@ -354,7 +355,7 @@ class MainWindow(QMainWindow):
         self.refresh_blocks()
 
         if visited_count == 1 and todo_id:
-            self.start_timer(last_block_key, todo_id)
+            self.prepare_timer(last_block_key, todo_id)
 
     def paint_todo_to_block(self, block_key: str) -> None:
         if not self.drag_todo_id or block_key in self.drag_visited_blocks:
@@ -371,7 +372,7 @@ class MainWindow(QMainWindow):
             return
         self.store.delete_block(self.day, self.selected_block_key)
         if self.running and self.running["block_key"] == self.selected_block_key:
-            self.stop_timer("paused")
+            self.cancel_timer_session()
         self.selected_block_key = None
         self.update_selected_block_label()
         self.refresh_blocks()
@@ -398,51 +399,83 @@ class MainWindow(QMainWindow):
         blocks = self.store.blocks_for_day(self.day)
         if self.selected_todo_id:
             self.store.assign_block(self.day, block_key, self.selected_todo_id)
-            self.start_timer(block_key, self.selected_todo_id)
+            self.prepare_timer(block_key, self.selected_todo_id)
             self.refresh_blocks()
             return
         todo_id = blocks.get(block_key)
         if todo_id:
-            self.start_timer(block_key, todo_id)
+            self.prepare_timer(block_key, todo_id)
             return
         QMessageBox.information(self, "To Do 선택", "먼저 To Do 카드를 선택한 뒤 시간 블록을 클릭하세요.")
 
-    def start_timer(self, block_key: str, todo_id: int) -> None:
-        if self.running:
-            self.stop_timer("completed")
+    def prepare_timer(self, block_key: str, todo_id: int) -> None:
+        if self.running and self.running["mode"] in {"focus", "distracted"}:
+            self.finish_current_timer_segment()
         todo = self.todo_lookup[todo_id]
         self.running = {
+            "session_id": f"timer-session:{uuid4().hex}",
             "block_key": block_key,
             "todo_id": todo_id,
             "subject_id": todo.subject_id,
-            "started_at": time.time(),
+            "prepared_at": time.time(),
+            "mode": "idle",
+            "segment_started_at": None,
+            "segments": [],
             "title": todo.title,
             "subject": todo.subject_name,
         }
         self.timer_context.setText(f"{block_key} · {todo.subject_name}\n{todo.title}")
-        self.tick.start(1000)
+        self.pause_button.setText("실행")
+        self.pause_button.setObjectName("PrimaryButton")
+        self.repolish(self.pause_button)
         self.update_timer()
 
-    def update_timer(self) -> None:
+    def toggle_timer(self) -> None:
         if not self.running:
-            self.timer_value.setText("00:00:00")
-            return
-        elapsed = int(time.time() - self.running["started_at"])
-        hours, remainder = divmod(elapsed, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        self.timer_value.setText(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+            if not self.selected_block_key:
+                QMessageBox.information(self, "블록 선택", "타이머를 실행할 Time Plan 블록을 먼저 선택하세요.")
+                return
+            todo_id = self.store.blocks_for_day(self.day).get(self.selected_block_key)
+            if not todo_id:
+                QMessageBox.information(self, "To Do 선택", "To Do가 배치된 시간 블록을 먼저 선택하세요.")
+                return
+            self.prepare_timer(self.selected_block_key, todo_id)
 
-    def stop_timer(self, event_type: str) -> None:
+        if self.running["mode"] == "focus":
+            self.finish_current_timer_segment()
+            self.start_timer_segment("distracted")
+            return
+
+        if self.running["mode"] == "distracted":
+            self.finish_current_timer_segment()
+
+        self.start_timer_segment("focus")
+
+    def start_timer_segment(self, mode: str) -> None:
         if not self.running:
             return
-        self.tick.stop()
+        self.running["mode"] = mode
+        self.running["segment_started_at"] = time.time()
+        self.tick.start(1000)
+        if mode == "focus":
+            self.pause_button.setText("중단")
+            self.pause_button.setObjectName("DangerButton")
+        else:
+            self.pause_button.setText("실행")
+            self.pause_button.setObjectName("PrimaryButton")
+        self.repolish(self.pause_button)
+        self.update_timer()
+
+    def finish_current_timer_segment(self) -> None:
+        if not self.running or self.running["mode"] not in {"focus", "distracted"}:
+            return
         ended = time.time()
-        started_at = datetime.fromtimestamp(self.running["started_at"]).isoformat(timespec="seconds")
-        ended_at = datetime.fromtimestamp(ended).isoformat(timespec="seconds")
-        seconds = max(1, int(ended - self.running["started_at"]))
-        memo = ""
-        if event_type in {"paused", "deferred"}:
-            memo = "사용자가 타이머 카드에서 기록"
+        started = self.running["segment_started_at"]
+        seconds = max(1, int(ended - started))
+        mode = self.running["mode"]
+        self.running["segments"].append({"mode": mode, "start": started, "end": ended})
+        event_type = "focus" if mode == "focus" else "distracted"
+        memo = self.running["session_id"]
         self.store.add_timer_record(
             self.day,
             self.running["todo_id"],
@@ -450,24 +483,91 @@ class MainWindow(QMainWindow):
             self.running["block_key"],
             event_type,
             seconds,
-            started_at,
-            ended_at,
+            datetime.fromtimestamp(started).isoformat(timespec="seconds"),
+            datetime.fromtimestamp(ended).isoformat(timespec="seconds"),
             memo,
         )
-        if event_type == "completed":
-            self.store.set_todo_status(self.running["todo_id"], "done")
-        elif event_type == "deferred":
-            self.store.set_todo_status(self.running["todo_id"], "deferred")
+        self.running["segment_started_at"] = ended
+        self.refresh_stats()
+        self.refresh_timer_visual()
+
+    def update_timer(self) -> None:
+        if not self.running:
+            self.timer_value.setText("00:00:00")
+            self.refresh_timer_visual()
+            return
+        elapsed = self.timer_elapsed_seconds()
+        hours, remainder = divmod(elapsed, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        self.timer_value.setText(f"{hours:02d}:{minutes:02d}:{seconds:02d}")
+        self.refresh_timer_visual()
+
+    def timer_elapsed_seconds(self) -> int:
+        if not self.running:
+            return 0
+        elapsed = sum(max(1, int(segment["end"] - segment["start"])) for segment in self.running["segments"])
+        if self.running["mode"] in {"focus", "distracted"}:
+            elapsed += max(0, int(time.time() - self.running["segment_started_at"]))
+        return elapsed
+
+    def active_timer_segments(self) -> list[dict]:
+        if not self.running:
+            return []
+        segments = list(self.running["segments"])
+        if self.running["mode"] in {"focus", "distracted"}:
+            segments.append(
+                {
+                    "mode": self.running["mode"],
+                    "start": self.running["segment_started_at"],
+                    "end": time.time(),
+                }
+            )
+        return segments
+
+    def refresh_timer_visual(self) -> None:
+        if hasattr(self, "time_grid_widget"):
+            self.time_grid_widget.set_timer_segments(self.active_timer_segments())
+
+    def cancel_timer_session(self) -> None:
+        if not self.running:
+            return
+        self.tick.stop()
+        self.store.delete_timer_records_by_memo(self.running["session_id"])
         self.running = None
-        self.timer_context.setText("기록이 저장됐어요.")
+        self.timer_context.setText("타이머를 취소했어요. 기록에는 누적되지 않습니다.")
+        self.pause_button.setText("실행")
+        self.pause_button.setObjectName("PrimaryButton")
+        self.repolish(self.pause_button)
+        self.update_timer()
+        self.refresh_stats()
+
+    def defer_timer_session(self) -> None:
+        if not self.running:
+            return
+        if self.running["mode"] in {"focus", "distracted"}:
+            self.finish_current_timer_segment()
+        self.tick.stop()
+        self.store.set_todo_status(self.running["todo_id"], "deferred")
+        self.running = None
+        self.timer_context.setText("미룸으로 기록했어요.")
+        self.pause_button.setText("실행")
+        self.pause_button.setObjectName("PrimaryButton")
+        self.repolish(self.pause_button)
         self.update_timer()
         self.refresh_all()
+
+    def repolish(self, widget) -> None:
+        widget.style().unpolish(widget)
+        widget.style().polish(widget)
+        widget.update()
 
     def save_brain_dump(self) -> None:
         if hasattr(self, "brain_dump"):
             self.store.save_brain_dump(self.day, self.brain_dump.toPlainText())
 
     def change_date(self, qdate: QDate) -> None:
+        if self.running:
+            self.cancel_timer_session()
         self.day = qdate.toString("yyyy-MM-dd")
         self.selected_todo_id = None
         self.set_selected_block(None)
@@ -589,12 +689,15 @@ class MainWindow(QMainWindow):
         life_total = 0
         paused_count = 0
         for record in records:
+            if record["event_type"] in {"distracted", "paused", "deferred"}:
+                paused_count += 1
+                continue
+            if record["event_type"] not in {"focus", "completed"}:
+                continue
             if record["subject_kind"] == "other":
                 life_total += record["seconds"]
             else:
                 totals[record["subject_name"]] += record["seconds"]
-            if record["event_type"] in {"paused", "deferred"}:
-                paused_count += 1
 
         if not totals:
             empty = QLabel("오늘 저장된 공부 시간이 아직 없습니다.")

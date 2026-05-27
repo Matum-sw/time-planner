@@ -14,12 +14,15 @@ def build_markdown_report(day: str, todos: list, records: list, notes: str = "")
     paused = []
 
     for record in records:
+        if record["event_type"] in {"distracted", "paused", "deferred"}:
+            paused.append(record)
+            continue
+        if record["event_type"] not in {"focus", "completed"}:
+            continue
         if record["subject_kind"] == "other":
             life_total += record["seconds"]
         else:
             study_totals[record["subject_name"]] += record["seconds"]
-        if record["event_type"] in {"paused", "deferred"}:
-            paused.append(record)
 
     lines = [
         f"# Daily Time Box Report - {day}",

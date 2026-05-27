@@ -190,6 +190,10 @@ class SQLiteStore:
         )
         self.connection.commit()
 
+    def delete_timer_records_by_memo(self, memo: str) -> None:
+        self.connection.execute("DELETE FROM timer_records WHERE memo = ?", (memo,))
+        self.connection.commit()
+
     def timer_records_for_day(self, day: str) -> list[dict]:
         rows = self.connection.execute(
             """

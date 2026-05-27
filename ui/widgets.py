@@ -87,6 +87,7 @@ class TimeGridWidget(QWidget):
         super().__init__(parent)
         self.day_provider = day_provider
         self.block_buttons = {}
+        self.timer_segments = []
         self.overlay = TimeMarkerOverlay(self)
         self.overlay.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.overlay.raise_()
@@ -97,6 +98,10 @@ class TimeGridWidget(QWidget):
 
     def set_block_buttons(self, block_buttons: dict) -> None:
         self.block_buttons = block_buttons
+        self.overlay.update()
+
+    def set_timer_segments(self, segments: list[dict]) -> None:
+        self.timer_segments = segments
         self.overlay.update()
 
     def resizeEvent(self, event) -> None:
@@ -119,6 +124,10 @@ class TimeMarkerOverlay(QWidget):
         if not grid or not grid.is_today():
             return
 
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        self.draw_timer_segments(painter, grid)
+
         now = datetime.now()
         first = grid.block_buttons.get(f"{now.hour:02d}:00")
         last = grid.block_buttons.get(f"{now.hour:02d}:50")
@@ -132,8 +141,6 @@ class TimeMarkerOverlay(QWidget):
         y1 = first.y() - 6
         y2 = first.y() + first.height() + 6
 
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
         painter.setPen(QPen(QColor("#2f7df6"), 3))
         painter.drawLine(int(x), y1, int(x), y2)
 
@@ -150,6 +157,38 @@ class TimeMarkerOverlay(QWidget):
         painter.drawRoundedRect(bubble, 8, 8)
         painter.setPen(QColor("#ffffff"))
         painter.drawText(bubble, Qt.AlignCenter, label)
+
+    def draw_timer_segments(self, painter: QPainter, grid: TimeGridWidget) -> None:
+        for segment in grid.timer_segments:
+            started = datetime.fromtimestamp(segment["start"])
+            ended = datetime.fromtimestamp(segment["end"])
+            if started.date().isoformat() != grid.day_provider():
+                continue
+
+            color = QColor("#34c759" if segment["mode"] == "focus" else "#ff5b5b")
+            color.setAlpha(92)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(color)
+
+            first_hour = max(0, started.hour)
+            last_hour = min(23, ended.hour)
+            for hour in range(first_hour, last_hour + 1):
+                first = grid.block_buttons.get(f"{hour:02d}:00")
+                last = grid.block_buttons.get(f"{hour:02d}:50")
+                if not first or not last:
+                    continue
+
+                hour_start_seconds = 0 if hour > started.hour else started.minute * 60 + started.second
+                hour_end_seconds = 3600 if hour < ended.hour else ended.minute * 60 + ended.second
+                if hour_end_seconds <= hour_start_seconds:
+                    continue
+
+                left = first.x()
+                right = last.x() + last.width()
+                x1 = left + (right - left) * (hour_start_seconds / 3600)
+                x2 = left + (right - left) * (hour_end_seconds / 3600)
+                rect = QRectF(x1, first.y() + 5, max(4, x2 - x1), first.height() - 10)
+                painter.drawRoundedRect(rect, 8, 8)
 
 
 class TimeBlockButton(QPushButton):
