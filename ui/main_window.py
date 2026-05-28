@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 from uuid import uuid4
 
@@ -34,6 +34,7 @@ from ui.widgets import Card, Pill, TimeBlockButton, TimeGridWidget, TimelineHead
 
 HOURS = list(range(4, 25))
 MINUTES = (0, 10, 20, 30, 40, 50)
+BLOCK_MINUTES = 10
 
 
 class MainWindow(QMainWindow):
@@ -166,7 +167,7 @@ class MainWindow(QMainWindow):
     def build_plan_card(self, parent) -> None:
         card = Card(
             "Time Plan",
-            "To Do를 선택하고 시간 블록을 클릭하거나 드래그하면 배치됩니다. 배치된 블록을 다시 클릭하면 타이머가 시작됩니다.",
+            "To Do를 선택하고 시간 블록을 클릭하거나 드래그하면 배치됩니다. 타이머는 현재 시간 기준으로 시작합니다.",
         )
         parent.addWidget(card, 1)
 
@@ -249,12 +250,12 @@ class MainWindow(QMainWindow):
         self.pause_button = QPushButton("실행")
         self.pause_button.setObjectName("PrimaryButton")
         self.pause_button.clicked.connect(self.toggle_timer)
-        self.defer_button = QPushButton("미룸")
-        self.defer_button.setObjectName("SoftButton")
-        self.defer_button.clicked.connect(self.defer_timer_session)
+        self.now_start_button = QPushButton("지금 시작")
+        self.now_start_button.setObjectName("SoftButton")
+        self.now_start_button.clicked.connect(self.start_current_task_now)
         actions.addWidget(self.cancel_button)
         actions.addWidget(self.pause_button)
-        actions.addWidget(self.defer_button)
+        actions.addWidget(self.now_start_button)
         card.layout.addLayout(actions)
 
     def build_stats_card(self, parent) -> None:
@@ -323,9 +324,7 @@ class MainWindow(QMainWindow):
         blocks = self.store.blocks_for_day(self.day)
         todo_id = blocks.get(block_key)
         if todo_id:
-            self.prepare_timer(block_key, todo_id)
             return
-        QMessageBox.information(self, "To Do 선택", "먼저 To Do 카드를 선택한 뒤 시간 블록을 클릭하세요.")
 
     def on_block_entered(self, block_key: str) -> None:
         if not self.drag_is_painting or not self.drag_todo_id:
@@ -345,17 +344,11 @@ class MainWindow(QMainWindow):
         if not self.drag_is_painting:
             return
 
-        visited_count = len(self.drag_visited_blocks)
-        todo_id = self.drag_todo_id
-        last_block_key = self.drag_last_block_key or block_key
         self.drag_todo_id = None
         self.drag_is_painting = False
         self.drag_last_block_key = None
         self.drag_visited_blocks = set()
         self.refresh_blocks()
-
-        if visited_count == 1 and todo_id:
-            self.prepare_timer(last_block_key, todo_id)
 
     def paint_todo_to_block(self, block_key: str) -> None:
         if not self.drag_todo_id or block_key in self.drag_visited_blocks:
@@ -395,18 +388,111 @@ class MainWindow(QMainWindow):
         text = f"선택된 블록 {self.selected_block_key}" if self.selected_block_key else "선택된 블록 없음"
         self.selected_block_label.setText(text)
 
-    def on_block_clicked(self, block_key: str) -> None:
+    def start_current_task_now(self) -> None:
+        if self.running:
+            QMessageBox.information(self, "타이머 실행 중", "현재 타이머를 취소한 뒤 다시 시작하세요.")
+            return
+        if self.day != self.store.today():
+            QMessageBox.information(self, "오늘 일정", "지금 시작은 오늘 날짜의 플래너에서만 사용할 수 있습니다.")
+            return
+
+        now = datetime.now()
+        current_key = self.block_key_for_datetime(now)
+        if not current_key:
+            self.show_replan_required("현재 시간이 Time Plan 범위 밖입니다.")
+            return
+
         blocks = self.store.blocks_for_day(self.day)
-        if self.selected_todo_id:
-            self.store.assign_block(self.day, block_key, self.selected_todo_id)
-            self.prepare_timer(block_key, self.selected_todo_id)
-            self.refresh_blocks()
+        todo_id = blocks.get(current_key)
+        if not todo_id:
+            self.show_replan_required("현재 시간에 배치된 테스크가 없습니다.")
             return
-        todo_id = blocks.get(block_key)
-        if todo_id:
-            self.prepare_timer(block_key, todo_id)
+
+        run_keys = self.contiguous_task_keys(blocks, current_key, todo_id)
+        planned_start = self.datetime_for_block(run_keys[0])
+        planned_end = self.datetime_for_block(run_keys[-1]) + timedelta(minutes=BLOCK_MINUTES)
+        duration = planned_end - planned_start
+        shifted_end = now + duration
+        target_keys = self.block_keys_for_interval(now, shifted_end)
+        if not target_keys:
+            self.show_replan_required("밀린 일정이 Time Plan 범위를 벗어납니다.")
             return
-        QMessageBox.information(self, "To Do 선택", "먼저 To Do 카드를 선택한 뒤 시간 블록을 클릭하세요.")
+
+        conflict_keys = [
+            key
+            for key in target_keys
+            if key not in run_keys and blocks.get(key) is not None and blocks.get(key) != todo_id
+        ]
+        if conflict_keys:
+            self.show_replan_required("밀린 일정이 뒤 테스크와 겹칩니다.")
+            return
+
+        self.store.delete_blocks(self.day, run_keys)
+        for key in target_keys:
+            self.store.assign_block(self.day, key, todo_id)
+        self.refresh_blocks()
+        self.set_selected_block(target_keys[0])
+        self.prepare_timer(target_keys[0], todo_id)
+        self.start_timer_segment("focus", started_at=now.timestamp())
+
+    def show_replan_required(self, reason: str) -> None:
+        QMessageBox.warning(
+            self,
+            "플래너 재조정 필요",
+            f"{reason}\n뒤 일정과 시간이 맞지 않으니 Time Plan을 직접 다시 짜세요.",
+        )
+
+    def all_block_keys(self) -> list[str]:
+        return [f"{hour:02d}:{minute:02d}" for hour in HOURS for minute in MINUTES]
+
+    def block_key_for_datetime(self, value: datetime) -> str | None:
+        minute = (value.minute // BLOCK_MINUTES) * BLOCK_MINUTES
+        key = f"{value.hour:02d}:{minute:02d}"
+        return key if key in self.block_buttons else None
+
+    def datetime_for_block(self, block_key: str) -> datetime:
+        hour_text, minute_text = block_key.split(":")
+        hour = int(hour_text)
+        minute = int(minute_text)
+        base = datetime.strptime(self.day, "%Y-%m-%d")
+        if hour >= 24:
+            return base + timedelta(days=1, hours=hour - 24, minutes=minute)
+        return base + timedelta(hours=hour, minutes=minute)
+
+    def ceil_to_block_datetime(self, value: datetime) -> datetime:
+        floored_minute = (value.minute // BLOCK_MINUTES) * BLOCK_MINUTES
+        floored = value.replace(minute=floored_minute, second=0, microsecond=0)
+        if floored == value:
+            return floored
+        return floored + timedelta(minutes=BLOCK_MINUTES)
+
+    def block_keys_for_interval(self, start: datetime, end: datetime) -> list[str]:
+        valid_keys = set(self.all_block_keys())
+        cursor = start.replace(
+            minute=(start.minute // BLOCK_MINUTES) * BLOCK_MINUTES,
+            second=0,
+            microsecond=0,
+        )
+        limit = self.ceil_to_block_datetime(end)
+        keys = []
+        while cursor < limit:
+            key = f"{cursor.hour:02d}:{cursor.minute:02d}"
+            if key not in valid_keys:
+                return []
+            keys.append(key)
+            cursor += timedelta(minutes=BLOCK_MINUTES)
+        return keys
+
+    def contiguous_task_keys(self, blocks: dict[str, int], current_key: str, todo_id: int) -> list[str]:
+        keys = self.all_block_keys()
+        index = keys.index(current_key)
+        start = index
+        end = index
+        while start > 0 and blocks.get(keys[start - 1]) == todo_id:
+            start -= 1
+        while end < len(keys) - 1 and blocks.get(keys[end + 1]) == todo_id:
+            end += 1
+        return keys[start : end + 1]
 
     def prepare_timer(self, block_key: str, todo_id: int) -> None:
         if self.running and self.running["mode"] in {"focus", "distracted"}:
@@ -432,14 +518,8 @@ class MainWindow(QMainWindow):
 
     def toggle_timer(self) -> None:
         if not self.running:
-            if not self.selected_block_key:
-                QMessageBox.information(self, "블록 선택", "타이머를 실행할 Time Plan 블록을 먼저 선택하세요.")
-                return
-            todo_id = self.store.blocks_for_day(self.day).get(self.selected_block_key)
-            if not todo_id:
-                QMessageBox.information(self, "To Do 선택", "To Do가 배치된 시간 블록을 먼저 선택하세요.")
-                return
-            self.prepare_timer(self.selected_block_key, todo_id)
+            QMessageBox.information(self, "지금 시작", "현재 시간의 테스크를 시작하려면 지금 시작 버튼을 누르세요.")
+            return
 
         if self.running["mode"] == "focus":
             self.finish_current_timer_segment()
@@ -451,11 +531,11 @@ class MainWindow(QMainWindow):
 
         self.start_timer_segment("focus")
 
-    def start_timer_segment(self, mode: str) -> None:
+    def start_timer_segment(self, mode: str, started_at: float | None = None) -> None:
         if not self.running:
             return
         self.running["mode"] = mode
-        self.running["segment_started_at"] = time.time()
+        self.running["segment_started_at"] = started_at or time.time()
         self.tick.start(1000)
         if mode == "focus":
             self.pause_button.setText("중단")
@@ -540,21 +620,6 @@ class MainWindow(QMainWindow):
         self.repolish(self.pause_button)
         self.update_timer()
         self.refresh_stats()
-
-    def defer_timer_session(self) -> None:
-        if not self.running:
-            return
-        if self.running["mode"] in {"focus", "distracted"}:
-            self.finish_current_timer_segment()
-        self.tick.stop()
-        self.store.set_todo_status(self.running["todo_id"], "deferred")
-        self.running = None
-        self.timer_context.setText("미룸으로 기록했어요.")
-        self.pause_button.setText("실행")
-        self.pause_button.setObjectName("PrimaryButton")
-        self.repolish(self.pause_button)
-        self.update_timer()
-        self.refresh_all()
 
     def repolish(self, widget) -> None:
         widget.style().unpolish(widget)
@@ -709,7 +774,7 @@ class MainWindow(QMainWindow):
                 self.stats_container.addWidget(Pill(f"{subject} · {round(seconds / 60)}분", "blue"))
 
         self.stats_container.addWidget(Pill(f"생활 일정 {round(life_total / 60)}분", "green"))
-        self.stats_container.addWidget(Pill(f"중단/미룸 {paused_count}회", "orange"))
+        self.stats_container.addWidget(Pill(f"집중 실패 {paused_count}회", "orange"))
 
     def generate_report(self) -> str:
         markdown = build_markdown_report(
@@ -732,7 +797,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "AI 피드백", self.ai.generate_feedback(markdown))
 
     def status_label(self, status: str) -> str:
-        return {"open": "진행 전", "done": "완료", "deferred": "미룸"}.get(status, status)
+        return {"open": "진행 전", "done": "완료", "deferred": "재조정 필요"}.get(status, status)
 
     def clear_layout(self, layout) -> None:
         while layout.count():
