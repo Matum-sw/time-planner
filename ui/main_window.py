@@ -231,7 +231,7 @@ class MainWindow(QMainWindow):
         card.layout.addWidget(scroll, 1)
 
     def build_timer_card(self, parent) -> None:
-        card = Card("Timer", "선택된 시간 블록의 집중 시간을 기록합니다.")
+        card = Card("Timer")
         parent.addWidget(card)
         self.timer_context = QLabel("아직 실행 중인 타이머가 없어요.")
         self.timer_context.setObjectName("TimerContext")
