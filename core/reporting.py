@@ -47,12 +47,12 @@ def build_markdown_report(day: str, todos: list, records: list, notes: str = "")
     )
     lines.extend(f"- [{ 'x' if todo.status == 'done' else ' ' }] {todo.title} ({todo.subject_name})" for todo in todos)
 
-    lines.extend(["", "## Distracted / Paused"])
+    lines.extend(["", "## Paused / Deferred"])
     if paused:
         for record in paused:
             lines.append(f"- {record['todo_title']} · {record['event_type']} · {record['memo'] or '메모 없음'}")
     else:
-        lines.append("- 집중 실패 기록 없음")
+        lines.append("- 중단/미룸 기록 없음")
 
     if notes:
         lines.extend(["", "## Brain Dump", notes])

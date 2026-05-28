@@ -165,13 +165,6 @@ class SQLiteStore:
         self.connection.execute("DELETE FROM time_blocks WHERE day = ? AND block_key = ?", (day, block_key))
         self.connection.commit()
 
-    def delete_blocks(self, day: str, block_keys: list[str]) -> None:
-        self.connection.executemany(
-            "DELETE FROM time_blocks WHERE day = ? AND block_key = ?",
-            [(day, block_key) for block_key in block_keys],
-        )
-        self.connection.commit()
-
     def blocks_for_day(self, day: str) -> dict[str, int]:
         rows = self.connection.execute("SELECT block_key, todo_id FROM time_blocks WHERE day = ?", (day,)).fetchall()
         return {row["block_key"]: row["todo_id"] for row in rows}
